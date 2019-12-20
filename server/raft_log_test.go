@@ -242,9 +242,9 @@ func TestRaftLogWithEncryption(t *testing.T) {
 	store.StoreLog(&raft.Log{Index: 1, Term: 1, Type: raft.LogCommand, Data: []byte("abcd")})
 	// Log with marker that says AES but content is not encrypted
 	store.StoreLog(&raft.Log{Index: 2, Term: 1, Type: raft.LogCommand, Data: []byte{stores.CryptoCodeAES, 'a', 'b', 'c', 'd'}})
-	store.RLock()
+	store.Lock()
 	fileName := store.fileName
-	store.RUnlock()
+	store.Unlock()
 	store.Close()
 
 	// Re-open as encrypted store

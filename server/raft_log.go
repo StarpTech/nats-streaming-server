@@ -39,7 +39,7 @@ var errKeyNotFound = errors.New("not found")
 // raftLog implements both the raft LogStore and Stable interfaces. This is used
 // by raft to store logs and configuration changes.
 type raftLog struct {
-	sync.RWMutex
+	sync.Mutex
 	log      logger.Logger
 	conn     *bolt.DB
 	fileName string
@@ -168,17 +168,17 @@ func (r *raftLog) Close() error {
 
 // FirstIndex implements the LogStore interface
 func (r *raftLog) FirstIndex() (uint64, error) {
-	r.RLock()
+	r.Lock()
 	idx, err := r.getIndex(true)
-	r.RUnlock()
+	r.Unlock()
 	return idx, err
 }
 
 // LastIndex implements the LogStore interface
 func (r *raftLog) LastIndex() (uint64, error) {
-	r.RLock()
+	r.Lock()
 	idx, err := r.getIndex(false)
-	r.RUnlock()
+	r.Unlock()
 	return idx, err
 }
 
@@ -208,10 +208,10 @@ func (r *raftLog) getIndex(first bool) (uint64, error) {
 
 // GetLog implements the LogStore interface
 func (r *raftLog) GetLog(idx uint64, log *raft.Log) error {
-	r.RLock()
+	r.Lock()
 	tx, err := r.conn.Begin(false)
 	if err != nil {
-		r.RUnlock()
+		r.Unlock()
 		return err
 	}
 	var key [8]byte
@@ -224,7 +224,7 @@ func (r *raftLog) GetLog(idx uint64, log *raft.Log) error {
 		err = r.decodeRaftLog(val, log)
 	}
 	tx.Rollback()
-	r.RUnlock()
+	r.Unlock()
 	return err
 }
 
@@ -329,10 +329,10 @@ func (r *raftLog) Set(k, v []byte) error {
 
 // Get implements the Stable interface
 func (r *raftLog) Get(k []byte) ([]byte, error) {
-	r.RLock()
+	r.Lock()
 	tx, err := r.conn.Begin(false)
 	if err != nil {
-		r.RUnlock()
+		r.Unlock()
 		return nil, err
 	}
 	var v []byte
@@ -345,7 +345,7 @@ func (r *raftLog) Get(k []byte) ([]byte, error) {
 		v = append([]byte(nil), val...)
 	}
 	tx.Rollback()
-	r.RUnlock()
+	r.Unlock()
 	return v, err
 }
 
