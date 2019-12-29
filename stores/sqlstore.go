@@ -17,6 +17,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ import (
 	"github.com/nats-io/nats-streaming-server/util"
 	"github.com/nats-io/nuid"
 	"github.com/nats-io/stan.go/pb"
+	"github.com/oklog/ulid"
 )
 
 const (
@@ -102,7 +104,7 @@ var sqlStmts = []string{
 	"INSERT INTO Clients (id, hbinbox, proto) VALUES (?, ?, ?)",                                                  // sqlAddClient
 	"DELETE FROM Clients WHERE id=?",                                                                             // sqlDeleteClient
 	"INSERT INTO Channels (id, name, maxmsgs, maxbytes, maxage) VALUES (?, ?, ?, ?, ?)",                          // sqlAddChannel
-	"INSERT INTO Messages VALUES (?, ?, ?, ?, ?)",                                                                // sqlStoreMsg
+	"INSERT INTO Messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",                                              // sqlStoreMsg
 	"SELECT timestamp, data FROM Messages WHERE id=? AND seq=?",                                                  // sqlLookupMsg
 	"SELECT seq FROM Messages WHERE id=? AND timestamp>=? ORDER BY seq LIMIT 1",                                  // sqlGetSequenceFromTimestamp
 	"UPDATE Channels SET maxseq=? WHERE id=?",                                                                    // sqlUpdateChannelMaxSeq
@@ -201,6 +203,15 @@ var (
 	sqlNoPanic                   = false // Used in tests to avoid go-routine to panic
 	sqlMsgCacheLimit             = sqlDefaultMsgCacheLimit
 )
+
+// Event is the data structure for the event store
+type Event struct {
+	Type        string      `json:"type"`
+	AggregateID string      `json:"aggregate_id"`
+	CommandID   string      `json:"command_id"`
+	CommandType string      `json:"command_type"`
+	EventData   interface{} `json:"data"`
+}
 
 // SQLStoreOptions are used to configure the SQL Store.
 type SQLStoreOptions struct {
@@ -1403,7 +1414,14 @@ func (ms *SQLMsgStore) Store(m *pb.MsgProto) (uint64, error) {
 		}
 		ms.writeCache.add(m, msgBytes)
 	} else {
-		if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes); err != nil {
+		// Event store modifications
+		var event Event
+		if err := json.Unmarshal(m.Data, &event); err == nil {
+			eventData, _ := json.Marshal(event.EventData)
+			if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, GenerateUUID(), event.Type, eventData, event.AggregateID, event.CommandID, event.CommandType); err != nil {
+				return 0, sqlStmtError(sqlStoreMsg, err)
+			}
+		} else if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, nil, nil, nil, nil, nil, nil); err != nil {
 			return 0, sqlStmtError(sqlStoreMsg, err)
 		}
 	}
@@ -1458,6 +1476,13 @@ func (ms *SQLMsgStore) Store(m *pb.MsgProto) (uint64, error) {
 		ms.createExpireTimer()
 	}
 	return seq, nil
+}
+
+// GenerateUUID returns an ULID id
+func GenerateUUID() string {
+	t := time.Now()
+	entropy := ulid.Monotonic(rand.New(rand.NewSource(t.UnixNano())), 0)
+	return ulid.MustNew(ulid.Timestamp(t), entropy).String()
 }
 
 func (ms *SQLMsgStore) createExpireTimer() {

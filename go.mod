@@ -10,9 +10,12 @@ require (
 	github.com/nats-io/nats.go v1.9.1
 	github.com/nats-io/nuid v1.0.1
 	github.com/nats-io/stan.go v0.6.0
+	github.com/oklog/ulid v1.3.1
 	github.com/prometheus/procfs v0.0.3
 	go.etcd.io/bbolt v1.3.3
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4
 	golang.org/x/sys v0.0.0-20190826190057-c7b8b68b1456
 	google.golang.org/appengine v1.6.1 // indirect
 )
+
+go 1.13
