@@ -17,7 +17,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,7 +28,6 @@ import (
 	"github.com/nats-io/nats-streaming-server/util"
 	"github.com/nats-io/nuid"
 	"github.com/nats-io/stan.go/pb"
-	"github.com/oklog/ulid"
 )
 
 const (
@@ -206,6 +204,7 @@ var (
 
 // Event is the data structure for the event store
 type Event struct {
+	ID          string      `json:"id"`
 	Type        string      `json:"type"`
 	AggregateID string      `json:"aggregate_id"`
 	CommandID   string      `json:"command_id"`
@@ -1418,7 +1417,7 @@ func (ms *SQLMsgStore) Store(m *pb.MsgProto) (uint64, error) {
 		var event Event
 		if err := json.Unmarshal(m.Data, &event); err == nil {
 			eventData, _ := json.Marshal(event.EventData)
-			if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, GenerateUUID(), event.Type, eventData, event.AggregateID, event.CommandID, event.CommandType); err != nil {
+			if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, event.ID, event.Type, eventData, event.AggregateID, event.CommandID, event.CommandType); err != nil {
 				return 0, sqlStmtError(sqlStoreMsg, err)
 			}
 		} else if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, nil, nil, nil, nil, nil, nil); err != nil {
@@ -1476,13 +1475,6 @@ func (ms *SQLMsgStore) Store(m *pb.MsgProto) (uint64, error) {
 		ms.createExpireTimer()
 	}
 	return seq, nil
-}
-
-// GenerateUUID returns an ULID id
-func GenerateUUID() string {
-	t := time.Now()
-	entropy := ulid.Monotonic(rand.New(rand.NewSource(t.UnixNano())), 0)
-	return ulid.MustNew(ulid.Timestamp(t), entropy).String()
 }
 
 func (ms *SQLMsgStore) createExpireTimer() {
@@ -1677,7 +1669,14 @@ func (ms *SQLMsgStore) flush() error {
 	// Iterate through the cache, but do not remove elements from the list.
 	// They are needed in transferToFreeList().
 	for cm := ms.writeCache.head; cm != nil; cm = cm.next {
-		if _, err := ps.Exec(ms.channelID, cm.msg.Sequence, cm.msg.Timestamp, len(cm.data), cm.data); err != nil {
+		// Event store modifications
+		var event Event
+		if err := json.Unmarshal(cm.data, &event); err == nil {
+			eventData, _ := json.Marshal(event.EventData)
+			if _, err := ps.Exec(ms.channelID, cm.msg.Sequence, cm.msg.Timestamp, len(cm.data), cm.data, event.ID, event.Type, eventData, event.AggregateID, event.CommandID, event.CommandType); err != nil {
+				return err
+			}
+		} else if _, err := ps.Exec(ms.channelID, cm.msg.Sequence, cm.msg.Timestamp, len(cm.data), cm.data); err != nil {
 			return err
 		}
 	}
