@@ -209,7 +209,7 @@ type Event struct {
 	AggregateID  string      `json:"aggregate_id"`
 	CommandID    string      `json:"command_id"`
 	CommandType  string      `json:"command_type"`
-	EventVersion string      `json:"version"`
+	EventVersion int64       `json:"version"`
 	EventData    interface{} `json:"data"`
 }
 
