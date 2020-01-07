@@ -102,7 +102,7 @@ var sqlStmts = []string{
 	"INSERT INTO Clients (id, hbinbox, proto) VALUES (?, ?, ?)",                                                  // sqlAddClient
 	"DELETE FROM Clients WHERE id=?",                                                                             // sqlDeleteClient
 	"INSERT INTO Channels (id, name, maxmsgs, maxbytes, maxage) VALUES (?, ?, ?, ?, ?)",                          // sqlAddChannel
-	"INSERT INTO Messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",                                              // sqlStoreMsg
+	"INSERT INTO Messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",                                           // sqlStoreMsg
 	"SELECT timestamp, data FROM Messages WHERE id=? AND seq=?",                                                  // sqlLookupMsg
 	"SELECT seq FROM Messages WHERE id=? AND timestamp>=? ORDER BY seq LIMIT 1",                                  // sqlGetSequenceFromTimestamp
 	"UPDATE Channels SET maxseq=? WHERE id=?",                                                                    // sqlUpdateChannelMaxSeq
@@ -204,12 +204,13 @@ var (
 
 // Event is the data structure for the event store
 type Event struct {
-	ID          string      `json:"id"`
-	Type        string      `json:"type"`
-	AggregateID string      `json:"aggregate_id"`
-	CommandID   string      `json:"command_id"`
-	CommandType string      `json:"command_type"`
-	EventData   interface{} `json:"data"`
+	ID           string      `json:"id"`
+	Type         string      `json:"type"`
+	AggregateID  string      `json:"aggregate_id"`
+	CommandID    string      `json:"command_id"`
+	CommandType  string      `json:"command_type"`
+	EventVersion string      `json:"version"`
+	EventData    interface{} `json:"data"`
 }
 
 // SQLStoreOptions are used to configure the SQL Store.
@@ -1417,10 +1418,10 @@ func (ms *SQLMsgStore) Store(m *pb.MsgProto) (uint64, error) {
 		var event Event
 		if err := json.Unmarshal(m.Data, &event); err == nil {
 			eventData, _ := json.Marshal(event.EventData)
-			if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, event.ID, event.Type, eventData, event.AggregateID, event.CommandID, event.CommandType); err != nil {
+			if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, event.EventVersion, event.ID, event.Type, eventData, event.AggregateID, event.CommandID, event.CommandType); err != nil {
 				return 0, sqlStmtError(sqlStoreMsg, err)
 			}
-		} else if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, nil, nil, nil, nil, nil, nil); err != nil {
+		} else if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, event.EventVersion, nil, nil, nil, nil, nil, nil); err != nil {
 			return 0, sqlStmtError(sqlStoreMsg, err)
 		}
 	}
@@ -1673,7 +1674,7 @@ func (ms *SQLMsgStore) flush() error {
 		var event Event
 		if err := json.Unmarshal(cm.data, &event); err == nil {
 			eventData, _ := json.Marshal(event.EventData)
-			if _, err := ps.Exec(ms.channelID, cm.msg.Sequence, cm.msg.Timestamp, len(cm.data), cm.data, event.ID, event.Type, eventData, event.AggregateID, event.CommandID, event.CommandType); err != nil {
+			if _, err := ps.Exec(ms.channelID, cm.msg.Sequence, cm.msg.Timestamp, len(cm.data), cm.data, event.EventVersion, event.ID, event.Type, eventData, event.AggregateID, event.CommandID, event.CommandType); err != nil {
 				return err
 			}
 		} else if _, err := ps.Exec(ms.channelID, cm.msg.Sequence, cm.msg.Timestamp, len(cm.data), cm.data); err != nil {
