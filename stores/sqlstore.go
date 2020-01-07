@@ -1421,7 +1421,7 @@ func (ms *SQLMsgStore) Store(m *pb.MsgProto) (uint64, error) {
 			if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, event.EventVersion, event.ID, event.Type, eventData, event.AggregateID, event.CommandID, event.CommandType); err != nil {
 				return 0, sqlStmtError(sqlStoreMsg, err)
 			}
-		} else if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, event.EventVersion, nil, nil, nil, nil, nil, nil); err != nil {
+		} else if _, err := ms.sqlStore.preparedStmts[sqlStoreMsg].Exec(ms.channelID, seq, m.Timestamp, dataLen, msgBytes, nil, nil, nil, nil, nil, nil, nil); err != nil {
 			return 0, sqlStmtError(sqlStoreMsg, err)
 		}
 	}
@@ -1677,7 +1677,7 @@ func (ms *SQLMsgStore) flush() error {
 			if _, err := ps.Exec(ms.channelID, cm.msg.Sequence, cm.msg.Timestamp, len(cm.data), cm.data, event.EventVersion, event.ID, event.Type, eventData, event.AggregateID, event.CommandID, event.CommandType); err != nil {
 				return err
 			}
-		} else if _, err := ps.Exec(ms.channelID, cm.msg.Sequence, cm.msg.Timestamp, len(cm.data), cm.data); err != nil {
+		} else if _, err := ps.Exec(ms.channelID, cm.msg.Sequence, cm.msg.Timestamp, len(cm.data), cm.data, nil, nil, nil, nil, nil, nil, nil); err != nil {
 			return err
 		}
 	}
